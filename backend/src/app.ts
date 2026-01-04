@@ -6,11 +6,19 @@ import { ErrorCodes } from "./common/errors/errorCodes.js";
 import { authRoutes } from "./auth/routes.js";
 import { requireAuth, requireAdmin } from "./auth/guards.js";
 import { registerRateLimit } from "./plugins/rateLimit.js";
+import multipart from "@fastify/multipart";
 
 export async function buildApp() {
   const app = Fastify({
     logger: true,
     genReqId: () => crypto.randomUUID(),
+  });
+
+  app.register(multipart, {
+    limits: {
+      files: 1,
+      fileSize: 10 * 1024 * 1024, // 10 MB
+    },
   });
 
   app.addHook("onRequest", async (req, reply) => {
@@ -47,11 +55,39 @@ export async function buildApp() {
   app.post(
     "/upload",
     {
+      preHandler: requireAuth,
       config: {
-        rateLimit: { max: Number(process.env.RATE_LIMIT_UPLOAD ?? 30), timeWindow: "1 minute" },
+        rateLimit: { max: 30, timeWindow: "1 minute" },
       },
     },
-    async () => ({ ok: true, note: "placeholder upload endpoint" }),
+    async (req) => {
+      if (!req.isMultipart()) {
+        throw new AppError(ErrorCodes.BAD_REQUEST, 400, "Expected multipart/form-data");
+      }
+
+      const part = await req.file();
+      if (!part) {
+        throw new AppError(ErrorCodes.BAD_REQUEST, 400, "Missing file");
+      }
+
+      let bytes = 0;
+      const hash = crypto.createHash("sha256");
+
+      for await (const chunk of part.file) {
+        bytes += chunk.length;
+        hash.update(chunk);
+      }
+
+      return {
+        ok: true,
+        file: {
+          filename: part.filename,
+          mimetype: part.mimetype,
+          bytes,
+          sha256: hash.digest("hex"),
+        },
+      };
+    },
   );
 
   // placeholder share endpoint (rate limited)
