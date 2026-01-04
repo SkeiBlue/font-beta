@@ -6,29 +6,42 @@ import { verifyPassword } from "./password.js";
 import { signAccessToken } from "./jwt.js";
 
 export async function authRoutes(app: FastifyInstance) {
-  app.post("/auth/login", async (req) => {
-    const body = req.body as { email?: string; password?: string };
+  const loginMax = Number(process.env.RATE_LIMIT_LOGIN ?? 20);
 
-    const email = (body.email ?? "").trim().toLowerCase();
-    const password = body.password ?? "";
+  app.post(
+    "/auth/login",
+    {
+      config: {
+        rateLimit: {
+          max: loginMax,
+          timeWindow: "1 minute",
+        },
+      },
+    },
+    async (req) => {
+      const body = req.body as { email?: string; password?: string };
 
-    if (!email || !password) {
-      throw new AppError(ErrorCodes.BAD_REQUEST, 400, "email and password required");
-    }
+      const email = (body.email ?? "").trim().toLowerCase();
+      const password = body.password ?? "";
 
-    const res = await pool.query(
-      'SELECT id, email, password_hash, role FROM public."users" WHERE email = $1 LIMIT 1',
-      [email],
-    );
+      if (!email || !password) {
+        throw new AppError(ErrorCodes.BAD_REQUEST, 400, "email and password required");
+      }
 
-    const user = res.rows[0];
-    if (!user) throw new AppError(ErrorCodes.UNAUTHORIZED, 401, "Invalid credentials");
+      const res = await pool.query(
+        'SELECT id, email, password_hash, role FROM public."users" WHERE email = $1 LIMIT 1',
+        [email],
+      );
 
-    const ok = await verifyPassword(password, user.password_hash);
-    if (!ok) throw new AppError(ErrorCodes.UNAUTHORIZED, 401, "Invalid credentials");
+      const user = res.rows[0];
+      if (!user) throw new AppError(ErrorCodes.UNAUTHORIZED, 401, "Invalid credentials");
 
-    const token = await signAccessToken({ sub: user.id, role: user.role, email: user.email });
+      const ok = await verifyPassword(password, user.password_hash);
+      if (!ok) throw new AppError(ErrorCodes.UNAUTHORIZED, 401, "Invalid credentials");
 
-    return { access_token: token };
-  });
+      const token = await signAccessToken({ sub: user.id, role: user.role, email: user.email });
+
+      return { access_token: token };
+    },
+  );
 }
