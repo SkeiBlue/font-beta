@@ -2,6 +2,7 @@
 import { LoginPage } from "./pages/Login";
 import { DashboardPage } from "./pages/Dashboard";
 import { UploadPage } from "./pages/Upload";
+import { SharePage } from "./pages/Share";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/app" element={<DashboardPage />} />
         <Route path="/app/upload" element={<UploadPage />} />
+        <Route path="/app/share" element={<SharePage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/login" replace />} />

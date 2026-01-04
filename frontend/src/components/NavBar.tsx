@@ -45,6 +45,10 @@ export function NavBar({ email, role, onRefresh, onAdminPing, onLogout, loading 
           Upload
         </Link>
 
+        <Link to="/app/share" style={linkStyle}>
+          Share
+        </Link>
+
         <span style={{ opacity: 0.85 }}>
           {email ? <span style={{ fontFamily: "monospace" }}>{email}</span> : ""}
         </span>
