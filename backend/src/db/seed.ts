@@ -1,17 +1,19 @@
 ﻿import { pool } from "./pool.js";
+import { hashPassword } from "../auth/password.js";
 
 async function main() {
+  const passHash = await hashPassword("admin");
+
   const text =
     'INSERT INTO public."users" ("email", "password_hash", "role") ' +
     "VALUES ($1, $2, $3) " +
-    'ON CONFLICT ("email") DO NOTHING ' +
+    'ON CONFLICT ("email") DO UPDATE SET "password_hash" = EXCLUDED."password_hash", "role" = EXCLUDED."role" ' +
     "RETURNING id";
 
-  const values = ["admin@font.local", "dev-password-hash", "admin"];
+  const values = ["admin@font.local", passHash, "admin"];
+  await pool.query(text, values);
 
-  const res = await pool.query(text, values);
-
-  console.log(res.rowCount === 1 ? "seed ok (inserted)" : "seed ok (already exists)");
+  console.log("seed ok");
   await pool.end();
 }
 
