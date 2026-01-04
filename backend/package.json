@@ -9,18 +9,25 @@
     "lint": "eslint -c .eslintrc.cjs \"src/**/*.ts\"",
     "lint:fix": "eslint -c .eslintrc.cjs \"src/**/*.ts\" --fix",
     "format": "prettier --config .prettierrc.json --write \"src/**/*.ts\"",
-    "format:check": "prettier --config .prettierrc.json --check \"src/**/*.ts\""
+    "format:check": "prettier --config .prettierrc.json --check \"src/**/*.ts\"",
+    "migrate:up": "dotenv -e .env -- node-pg-migrate up --migrations-dir src/db/migrations",
+    "migrate:down": "dotenv -e .env -- node-pg-migrate down --migrations-dir src/db/migrations",
+    "seed": "dotenv -e .env -- tsx src/db/seed.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
-    "fastify": "^4.28.1"
+    "fastify": "^4.28.1",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/pg": "^8.16.0",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^10.1.8",
+    "node-pg-migrate": "^8.0.4",
     "prettier": "^3.7.4",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4"
