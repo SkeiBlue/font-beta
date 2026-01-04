@@ -1,65 +1,83 @@
-﻿import Fastify from "fastify";
+﻿import Fastify, { type FastifyInstance } from "fastify";
+import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import crypto from "node:crypto";
+
 import { pool } from "./db/pool.js";
+import { registerRateLimit } from "./plugins/rateLimit.js";
+
+import { requireAdmin, requireAuth } from "./auth/guards.js";
+import * as AuthRoutesModule from "./auth/routes.js";
+
 import { AppError } from "./common/errors/AppError.js";
 import { ErrorCodes } from "./common/errors/errorCodes.js";
-import { authRoutes } from "./auth/routes.js";
-import { requireAuth, requireAdmin } from "./auth/guards.js";
-import { registerRateLimit } from "./plugins/rateLimit.js";
-import multipart from "@fastify/multipart";
 
-export async function buildApp() {
+type RegisterRoutesFn = (app: FastifyInstance) => void | Promise<void>;
+
+function pickAuthRegister(): RegisterRoutesFn {
+  const mod: Record<string, unknown> = AuthRoutesModule;
+
+  const preferred = ["registerAuthRoutes", "registerRoutes", "register", "routes", "default"];
+  for (const name of preferred) {
+    const v = mod[name];
+    if (typeof v === "function") return v as RegisterRoutesFn;
+  }
+
+  const anyFn = Object.entries(mod).find(([, v]) => typeof v === "function");
+  if (anyFn) return anyFn[1] as RegisterRoutesFn;
+
+  throw new Error(
+    `auth/routes.ts: aucun export function trouvé. Exports: ${Object.keys(mod).join(", ")}`,
+  );
+}
+
+export function buildApp(): FastifyInstance {
   const app = Fastify({
     logger: true,
-    genReqId: () => crypto.randomUUID(),
+    disableRequestLogging: true,
   });
 
-  app.register(multipart, {
-    limits: {
-      files: 1,
-      fileSize: 10 * 1024 * 1024, // 10 MB
-    },
-  });
-
+  // x-request-id sur toutes les réponses
   app.addHook("onRequest", async (req, reply) => {
     reply.header("x-request-id", req.id);
   });
 
-  //  IMPORTANT: wait plugin before declaring routes
-  await registerRateLimit(app);
+  // CORS
+  app.register(cors, { origin: true, credentials: true });
 
+  // Rate limit
+  registerRateLimit(app);
+
+  // Multipart
+  app.register(multipart, {
+    limits: { files: 1, fileSize: 10 * 1024 * 1024 },
+  });
+
+  // Health
   app.get("/health", async () => ({ ok: true }));
 
-  app.get("/health/db", async (_req, reply) => {
+  app.get("/health/db", async () => {
     try {
       await pool.query("SELECT 1");
       return { db: true };
-    } catch (err) {
-      app.log.error({ err }, "db health failed");
-      reply.code(500);
+    } catch {
       return { db: false };
     }
   });
 
-  authRoutes(app);
+  // Auth routes (auto-détecté)
+  pickAuthRegister()(app);
 
-  app.get("/me", { preHandler: async (req) => requireAuth(req) }, async (req) => ({
-    user: req.user ?? null,
-  }));
+  // Me
+  app.get("/me", { preHandler: requireAuth }, async (req) => ({ user: req.user }));
 
-  app.get("/admin/ping", { preHandler: async (req) => requireAdmin(req) }, async () => ({
-    ok: true,
-  }));
+  // Admin ping
+  app.get("/admin/ping", { preHandler: [requireAuth, requireAdmin] }, async () => ({ ok: true }));
 
-  // placeholder upload endpoint (rate limited)
+  // Upload (DB metadata)
   app.post(
     "/upload",
-    {
-      preHandler: requireAuth,
-      config: {
-        rateLimit: { max: 30, timeWindow: "1 minute" },
-      },
-    },
+    { preHandler: requireAuth, config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
     async (req) => {
       if (!req.isMultipart()) {
         throw new AppError(ErrorCodes.BAD_REQUEST, 400, "Expected multipart/form-data");
@@ -70,6 +88,11 @@ export async function buildApp() {
         throw new AppError(ErrorCodes.BAD_REQUEST, 400, "Missing file");
       }
 
+      const userId = req.user?.sub;
+      if (!userId) {
+        throw new AppError(ErrorCodes.UNAUTHORIZED, 401, "Missing user context");
+      }
+
       let bytes = 0;
       const hash = crypto.createHash("sha256");
 
@@ -78,29 +101,73 @@ export async function buildApp() {
         hash.update(chunk);
       }
 
-      return {
-        ok: true,
-        file: {
-          filename: part.filename,
-          mimetype: part.mimetype,
-          bytes,
-          sha256: hash.digest("hex"),
-        },
-      };
+      const sha256 = hash.digest("hex");
+
+      try {
+        const r = await pool.query<{ id: string }>(
+          `INSERT INTO uploads (user_id, filename, mimetype, bytes, sha256)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id`,
+          [userId, part.filename, part.mimetype, bytes, sha256],
+        );
+
+        const upload_id = r.rows[0]?.id;
+        if (!upload_id) throw new AppError(ErrorCodes.INTERNAL_ERROR, 500, "Upload insert failed");
+
+        return {
+          ok: true,
+          upload_id,
+          file: { filename: part.filename, mimetype: part.mimetype, bytes, sha256 },
+        };
+      } catch (err) {
+        throw new AppError(ErrorCodes.INTERNAL_ERROR, 500, "Database error", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
     },
   );
 
-  // placeholder share endpoint (rate limited)
+  //  2.3  Liste des uploads de lutilisateur
+  app.get<{ Querystring: { limit?: string; offset?: string } }>(
+    "/uploads",
+    { preHandler: requireAuth, config: { rateLimit: { max: 60, timeWindow: "1 minute" } } },
+    async (req) => {
+      const userId = req.user?.sub;
+      if (!userId) {
+        throw new AppError(ErrorCodes.UNAUTHORIZED, 401, "Missing user context");
+      }
+
+      const limit = Math.min(Math.max(parseInt(req.query.limit ?? "50", 10) || 50, 1), 200);
+      const offset = Math.max(parseInt(req.query.offset ?? "0", 10) || 0, 0);
+
+      const { rows } = await pool.query<{
+        id: string;
+        filename: string;
+        mimetype: string;
+        bytes: number;
+        sha256: string;
+        created_at: string;
+      }>(
+        `SELECT id, filename, mimetype, bytes, sha256, created_at
+         FROM uploads
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset],
+      );
+
+      return { uploads: rows, limit, offset };
+    },
+  );
+
+  // Share (stub)
   app.post(
     "/share",
-    {
-      config: {
-        rateLimit: { max: Number(process.env.RATE_LIMIT_SHARE ?? 60), timeWindow: "1 minute" },
-      },
-    },
-    async () => ({ ok: true, note: "placeholder share endpoint" }),
+    { preHandler: requireAuth, config: { rateLimit: { max: 60, timeWindow: "1 minute" } } },
+    async () => ({ ok: true }),
   );
 
+  // 404
   app.setNotFoundHandler(async (req, reply) => {
     reply.code(404);
     return {
@@ -113,21 +180,8 @@ export async function buildApp() {
     };
   });
 
+  // Errors
   app.setErrorHandler(async (err, req, reply) => {
-    // handle rate-limit (safety)
-    const statusCode = (err as { statusCode?: number }).statusCode;
-    if (statusCode === 429) {
-      reply.code(429);
-      return {
-        error: {
-          code: ErrorCodes.TOO_MANY_REQUESTS,
-          message: "Too many requests",
-          statusCode: 429,
-          request_id: req.id,
-        },
-      };
-    }
-
     if (err instanceof AppError) {
       reply.code(err.statusCode);
       return {
@@ -149,6 +203,10 @@ export async function buildApp() {
         message: "Internal server error",
         statusCode: 500,
         request_id: req.id,
+        details:
+          process.env.NODE_ENV === "development"
+            ? { name: err?.name, message: err?.message }
+            : null,
       },
     };
   });
