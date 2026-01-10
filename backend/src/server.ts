@@ -1,14 +1,25 @@
-﻿import { env } from "./config/env.js";
-import { buildApp } from "./app.js";
+import { env } from "./config/env";
+import { buildApp } from "./app";
+
+process.on("unhandledRejection", (err) => {
+  // eslint-disable-next-line no-console
+  console.error("[unhandledRejection]", err);
+});
+process.on("uncaughtException", (err) => {
+  // eslint-disable-next-line no-console
+  console.error("[uncaughtException]", err);
+});
 
 async function main() {
   const app = await buildApp();
 
   try {
-    const address = await app.listen({ host: env.host, port: env.port });
+    // Windows-friendly: do not pass host, let Fastify bind properly (IPv4+IPv6)
+    const address = await app.listen({ port: env.port });
     app.log.info(`Server listening at ${address}`);
   } catch (err) {
-    app.log.error({ err }, "failed to start server");
+    // eslint-disable-next-line no-console
+    console.error("failed to start server:", err);
     process.exit(1);
   }
 }

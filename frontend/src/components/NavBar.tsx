@@ -45,6 +45,11 @@ export function NavBar({ email, role, onRefresh, onAdminPing, onLogout, loading 
           Upload
         </Link>
 
+        {/* ✅ Nouveau lien */}
+        <Link to="/app/analyze" style={linkStyle}>
+          Analyse
+        </Link>
+
         <Link to="/app/share" style={linkStyle}>
           Share
         </Link>

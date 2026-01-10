@@ -1,5 +1,5 @@
-﻿import { pool } from "./pool.js";
-import { hashPassword } from "../auth/password.js";
+import { pool } from "./pool";
+import { hashPassword } from "../auth/password";
 
 async function main() {
   const passHash = await hashPassword("admin");

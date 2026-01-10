@@ -1,5 +1,5 @@
-﻿import "fastify";
-import type { JwtPayload } from "../auth/jwt.js";
+import "fastify";
+import type { JwtPayload } from "../auth/jwt";
 
 declare module "fastify" {
   interface FastifyRequest {

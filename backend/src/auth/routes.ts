@@ -1,9 +1,9 @@
-﻿import type { FastifyInstance } from "fastify";
-import { pool } from "../db/pool.js";
-import { AppError } from "../common/errors/AppError.js";
-import { ErrorCodes } from "../common/errors/errorCodes.js";
-import { verifyPassword } from "./password.js";
-import { signAccessToken } from "./jwt.js";
+import type { FastifyInstance } from "fastify";
+import { pool } from "../db/pool";
+import { AppError } from "../common/errors/AppError";
+import { ErrorCodes } from "../common/errors/errorCodes";
+import { verifyPassword } from "./password";
+import { signAccessToken } from "./jwt";
 
 export async function authRoutes(app: FastifyInstance) {
   const loginMax = Number(process.env.RATE_LIMIT_LOGIN ?? 20);

@@ -1,7 +1,7 @@
-﻿import type { FastifyRequest } from "fastify";
-import { verifyAccessToken } from "./jwt.js";
-import { AppError } from "../common/errors/AppError.js";
-import { ErrorCodes } from "../common/errors/errorCodes.js";
+import type { FastifyRequest } from "fastify";
+import { verifyAccessToken } from "./jwt";
+import { AppError } from "../common/errors/AppError";
+import { ErrorCodes } from "../common/errors/errorCodes";
 
 export async function requireAuth(req: FastifyRequest) {
   const header = req.headers.authorization;

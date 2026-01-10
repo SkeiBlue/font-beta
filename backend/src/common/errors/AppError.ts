@@ -1,4 +1,4 @@
-﻿import type { ErrorCode } from "./errorCodes.js";
+import type { ErrorCode } from "./errorCodes";
 
 export class AppError extends Error {
   public readonly code: ErrorCode;

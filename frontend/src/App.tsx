@@ -2,21 +2,26 @@
 import { LoginPage } from "./pages/Login";
 import { DashboardPage } from "./pages/Dashboard";
 import { UploadPage } from "./pages/Upload";
+import { AnalyzePage } from "./pages/Analyze";
 import { SharePage } from "./pages/Share";
-import { ProtectedRoute } from "./routes/ProtectedRoute";
+import { ProtectedRoute } from "./auth/ProtectedRoute";
+import { AppLayout } from "./components/AppLayout";
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
 
       <Route element={<ProtectedRoute />}>
-        <Route path="/app" element={<DashboardPage />} />
-        <Route path="/app/upload" element={<UploadPage />} />
-        <Route path="/app/share" element={<SharePage />} />
+        <Route element={<AppLayout />}>
+          <Route path="/app" element={<DashboardPage />} />
+          <Route path="/app/upload" element={<UploadPage />} />
+          <Route path="/app/analyze" element={<AnalyzePage />} />
+          <Route path="/app/share" element={<SharePage />} />
+        </Route>
       </Route>
 
+      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );

@@ -1,16 +1,17 @@
-﻿import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
-import crypto from "node:crypto";
 
-import { pool } from "./db/pool.js";
-import { registerRateLimit } from "./plugins/rateLimit.js";
+import { pool } from "./db/pool";
+import { registerRateLimit } from "./plugins/rateLimit";
 
-import { requireAdmin, requireAuth } from "./auth/guards.js";
-import * as AuthRoutesModule from "./auth/routes.js";
+import * as AuthRoutesModule from "./auth/routes";
 
-import { AppError } from "./common/errors/AppError.js";
-import { ErrorCodes } from "./common/errors/errorCodes.js";
+import { AppError } from "./common/errors/AppError";
+import { ErrorCodes } from "./common/errors/errorCodes";
+
+import { registerProducts } from "./core/products/registerProducts";
+import { fontProduct } from "./products/font/index";
 
 type RegisterRoutesFn = (app: FastifyInstance) => void | Promise<void>;
 
@@ -31,7 +32,7 @@ function pickAuthRegister(): RegisterRoutesFn {
   );
 }
 
-export function buildApp(): FastifyInstance {
+export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: true,
     disableRequestLogging: true,
@@ -42,14 +43,10 @@ export function buildApp(): FastifyInstance {
     reply.header("x-request-id", req.id);
   });
 
-  // CORS
-  app.register(cors, { origin: true, credentials: true });
-
-  // Rate limit
-  registerRateLimit(app);
-
-  // Multipart
-  app.register(multipart, {
+  // Plugins
+  await app.register(cors, { origin: true, credentials: true });
+  await registerRateLimit(app);
+  await app.register(multipart, {
     limits: { files: 1, fileSize: 10 * 1024 * 1024 },
   });
 
@@ -66,106 +63,10 @@ export function buildApp(): FastifyInstance {
   });
 
   // Auth routes (auto-détecté)
-  pickAuthRegister()(app);
+  await pickAuthRegister()(app);
 
-  // Me
-  app.get("/me", { preHandler: requireAuth }, async (req) => ({ user: req.user }));
-
-  // Admin ping
-  app.get("/admin/ping", { preHandler: [requireAuth, requireAdmin] }, async () => ({ ok: true }));
-
-  // Upload (DB metadata)
-  app.post(
-    "/upload",
-    { preHandler: requireAuth, config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
-    async (req) => {
-      if (!req.isMultipart()) {
-        throw new AppError(ErrorCodes.BAD_REQUEST, 400, "Expected multipart/form-data");
-      }
-
-      const part = await req.file();
-      if (!part) {
-        throw new AppError(ErrorCodes.BAD_REQUEST, 400, "Missing file");
-      }
-
-      const userId = req.user?.sub;
-      if (!userId) {
-        throw new AppError(ErrorCodes.UNAUTHORIZED, 401, "Missing user context");
-      }
-
-      let bytes = 0;
-      const hash = crypto.createHash("sha256");
-
-      for await (const chunk of part.file) {
-        bytes += chunk.length;
-        hash.update(chunk);
-      }
-
-      const sha256 = hash.digest("hex");
-
-      try {
-        const r = await pool.query<{ id: string }>(
-          `INSERT INTO uploads (user_id, filename, mimetype, bytes, sha256)
-           VALUES ($1, $2, $3, $4, $5)
-           RETURNING id`,
-          [userId, part.filename, part.mimetype, bytes, sha256],
-        );
-
-        const upload_id = r.rows[0]?.id;
-        if (!upload_id) throw new AppError(ErrorCodes.INTERNAL_ERROR, 500, "Upload insert failed");
-
-        return {
-          ok: true,
-          upload_id,
-          file: { filename: part.filename, mimetype: part.mimetype, bytes, sha256 },
-        };
-      } catch (err) {
-        throw new AppError(ErrorCodes.INTERNAL_ERROR, 500, "Database error", {
-          message: err instanceof Error ? err.message : String(err),
-        });
-      }
-    },
-  );
-
-  //  2.3  Liste des uploads de lutilisateur
-  app.get<{ Querystring: { limit?: string; offset?: string } }>(
-    "/uploads",
-    { preHandler: requireAuth, config: { rateLimit: { max: 60, timeWindow: "1 minute" } } },
-    async (req) => {
-      const userId = req.user?.sub;
-      if (!userId) {
-        throw new AppError(ErrorCodes.UNAUTHORIZED, 401, "Missing user context");
-      }
-
-      const limit = Math.min(Math.max(parseInt(req.query.limit ?? "50", 10) || 50, 1), 200);
-      const offset = Math.max(parseInt(req.query.offset ?? "0", 10) || 0, 0);
-
-      const { rows } = await pool.query<{
-        id: string;
-        filename: string;
-        mimetype: string;
-        bytes: number;
-        sha256: string;
-        created_at: string;
-      }>(
-        `SELECT id, filename, mimetype, bytes, sha256, created_at
-         FROM uploads
-         WHERE user_id = $1
-         ORDER BY created_at DESC
-         LIMIT $2 OFFSET $3`,
-        [userId, limit, offset],
-      );
-
-      return { uploads: rows, limit, offset };
-    },
-  );
-
-  // Share (stub)
-  app.post(
-    "/share",
-    { preHandler: requireAuth, config: { rateLimit: { max: 60, timeWindow: "1 minute" } } },
-    async () => ({ ok: true }),
-  );
+  // Produits SaaS (0.8) : FONT est branché ici, sans changer les URLs.
+  await registerProducts(app, [fontProduct]);
 
   // 404
   app.setNotFoundHandler(async (req, reply) => {

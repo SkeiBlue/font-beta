@@ -1,6 +1,6 @@
-﻿import rateLimit from "@fastify/rate-limit";
+import rateLimit from "@fastify/rate-limit";
 import type { FastifyInstance } from "fastify";
-import { ErrorCodes } from "../common/errors/errorCodes.js";
+import { ErrorCodes } from "../common/errors/errorCodes";
 
 export async function registerRateLimit(app: FastifyInstance) {
   const globalMax = Number(process.env.RATE_LIMIT_GLOBAL ?? 200);
