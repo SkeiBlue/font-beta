@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { getToken } from "../auth/token";
-import { ErrorBox } from "../components/ErrorBox";
+import { getToken } from "../../../core/auth/token";
+import { ErrorBox } from "../../../core/ui/ErrorBox";
 import { listUploads, type UploadRow } from "../api/uploads";
 
 type UploadResponse = {

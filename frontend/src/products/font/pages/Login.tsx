@@ -1,9 +1,9 @@
 ﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiFetch } from "../api/client";
-import { getErrorMessage } from "../api/errorMessages";
-import { ErrorBox } from "../components/ErrorBox";
-import { getToken, setToken, clearToken } from "../auth/token";
+import { apiFetch } from "../../../core/api/client";
+import { getErrorMessage } from "../../../core/errors/errorMessages";
+import { ErrorBox } from "../../../core/ui/ErrorBox";
+import { getToken, setToken, clearToken } from "../../../core/auth/token";
 
 type LoginResponse = { access_token: string };
 

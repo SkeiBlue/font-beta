@@ -2,6 +2,11 @@
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App.tsx";
+import { initProduct } from "./core/product/initProduct";
+import { fontProductConfig } from "./products/font";
+
+initProduct(fontProductConfig);
+
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

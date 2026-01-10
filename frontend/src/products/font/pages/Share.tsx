@@ -1,7 +1,7 @@
 ﻿import { useState } from "react";
-import { apiFetch } from "../api/client";
-import { ErrorBox } from "../components/ErrorBox";
-import { getErrorMessage } from "../api/errorMessages";
+import { apiFetch } from "../../../core/api/client";
+import { ErrorBox } from "../../../core/ui/ErrorBox";
+import { getErrorMessage } from "../../../core/errors/errorMessages";
 
 type UiError = { title: string; details?: string };
 

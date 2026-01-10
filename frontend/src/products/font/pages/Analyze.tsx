@@ -1,6 +1,6 @@
 ﻿import { useState } from "react";
-import { getToken } from "../auth/token";
-import { ErrorBox } from "../components/ErrorBox";
+import { getToken } from "../../../core/auth/token";
+import { ErrorBox } from "../../../core/ui/ErrorBox";
 
 type StdError = {
   error: {
